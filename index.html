@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Cyber Attacker Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css?family=Fira+Mono|Share+Tech+Mono&display=swap" rel="stylesheet">
+</head>
+<body>
+    <header class="header">
+        <div class="logo">🛡️</div>
+        <div class="title">AI Cyber Attacker Dashboard</div>
+        <div class="status" id="api-status">API: <span class="offline">Offline</span></div>
+    </header>
+    <div class="container">
+        <div class="left-panel">
+            <form id="attack-form">
+                <h2>Khởi động Attack</h2>
+                <label>🎯 Target<br><input type="text" id="target" value="127.0.0.1:5000" autocomplete="off"></label>
+                <label>🧠 Mode<br>
+                    <select id="mode">
+                        <option value="training">Training</option>
+                        <option value="evaluation">Evaluation</option>
+                    </select>
+                </label>
+                <button type="submit" id="run-btn">🚀 Khởi động</button>
+            </form>
+            <div class="attack-status" id="attack-status">Chưa chạy attack.</div>
+            <div class="guide">
+                <h3>Hướng dẫn</h3>
+                <ul>
+                    <li>Nhập target (IP/Domain)</li>
+                    <li>Chọn mode (training/evaluation)</li>
+                    <li>Nhấn <b>Khởi động</b></li>
+                    <li>Xem log, kết quả</li>
+                </ul>
+            </div>
+        </div>
+        <div class="right-panel">
+            <div class="log-container" id="log-container"></div>
+            <div class="result-container" id="result-container"></div>
+            <button id="export-report-btn" style="margin-top:16px;padding:10px 24px;background:#4caf50;color:#18181a;border:none;border-radius:6px;cursor:pointer;font-weight:bold;">Xuất báo cáo</button>
+        </div>
+    </div>
+    <footer class="footer">
+        © 2024 AI Cyber Attacker | Dashboard by <a href="#" target="_blank">YourName</a>
+    </footer>
+    <script>
+        // API status check
+        async function checkAPI() {
+            try {
+                await fetch('http://localhost:5005/attack_log');
+                document.getElementById('api-status').innerHTML = 'API: <span class="online">Online</span>';
+            } catch {
+                document.getElementById('api-status').innerHTML = 'API: <span class="offline">Offline</span>';
+            }
+        }
+        checkAPI();
+        setInterval(checkAPI, 5000);
+
+        // Render log
+        function renderLog(logs) {
+            const logContainer = document.getElementById('log-container');
+            logContainer.innerHTML = logs.map(l => `<div class='log-line'>${l}</div>`).join('');
+        }
+
+        // Thêm popup nhập nội dung XSS tuỳ chỉnh
+        function showXssPopup(callback) {
+            let popup = document.createElement('div');
+            popup.style.position = 'fixed';
+            popup.style.top = '0';
+            popup.style.left = '0';
+            popup.style.width = '100vw';
+            popup.style.height = '100vh';
+            popup.style.background = 'rgba(0,0,0,0.7)';
+            popup.style.display = 'flex';
+            popup.style.alignItems = 'center';
+            popup.style.justifyContent = 'center';
+            popup.style.zIndex = '9999';
+            popup.innerHTML = `
+                <div style="background:#232326;padding:32px 28px;border-radius:12px;box-shadow:0 2px 16px #000a;min-width:320px;max-width:90vw;">
+                    <h2 style='color:#4caf50;margin-bottom:16px;'>Khai thác XSS tuỳ chỉnh</h2>
+                    <div style='color:#c8ffc8;margin-bottom:10px;'>Nhập nội dung bạn muốn chèn vào vị trí XSS (có thể là script, HTML, text...)</div>
+                    <textarea id='xss-content' style='width:100%;height:80px;background:#18181a;color:#c8ffc8;border:1.5px solid #4caf50;border-radius:6px;padding:8px;font-size:1rem;'></textarea>
+                    <div style='margin-top:18px;display:flex;gap:12px;justify-content:flex-end;'>
+                        <button id='xss-cancel' style='padding:8px 18px;background:#222;color:#fff;border:none;border-radius:6px;cursor:pointer;'>Huỷ</button>
+                        <button id='xss-ok' style='padding:8px 18px;background:#4caf50;color:#18181a;border:none;border-radius:6px;cursor:pointer;font-weight:bold;'>Khai thác</button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(popup);
+            document.getElementById('xss-cancel').onclick = () => document.body.removeChild(popup);
+            document.getElementById('xss-ok').onclick = () => {
+                const val = document.getElementById('xss-content').value;
+                document.body.removeChild(popup);
+                callback(val);
+            };
+        }
+
+        // Sửa renderResult để phát hiện XSS và hiển thị nút khai thác tuỳ chỉnh
+        function renderResult(result) {
+            const resultContainer = document.getElementById('result-container');
+            if (!result) { resultContainer.innerHTML = ''; return; }
+            let html = `<h3>Kết quả tấn công:</h3><pre>${JSON.stringify(result, null, 2)}</pre>`;
+            // Nếu có XSS, hiển thị nút khai thác tuỳ chỉnh
+            if (result && result.vulnerabilities && result.vulnerabilities.some(v => v.type === 'xss')) {
+                html += `<button id='custom-xss-btn' style='margin-top:12px;padding:8px 18px;background:#4caf50;color:#18181a;border:none;border-radius:6px;cursor:pointer;font-weight:bold;'>Khai thác XSS tuỳ chỉnh</button>`;
+            }
+            resultContainer.innerHTML = html;
+            // Gắn sự kiện cho nút
+            const btn = document.getElementById('custom-xss-btn');
+            if (btn) {
+                btn.onclick = () => {
+                    showXssPopup(async (content) => {
+                        if (!content) return;
+                        renderStatus('Đang khai thác XSS tuỳ chỉnh...', 'running');
+                        const res = await fetch('http://localhost:5005/custom_xss_exploit', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ content })
+                        });
+                        const data = await res.json();
+                        let msg = `<div style='margin-top:10px;'><b>Kết quả XSS tuỳ chỉnh:</b><br><pre>${JSON.stringify(data, null, 2)}</pre></div>`;
+                        resultContainer.innerHTML += msg;
+                        renderStatus('Khai thác XSS tuỳ chỉnh hoàn thành.', 'done');
+                    });
+                };
+            }
+        }
+
+        // Render status
+        function renderStatus(text, type='info') {
+            const el = document.getElementById('attack-status');
+            el.className = 'attack-status ' + type;
+            el.innerText = text;
+        }
+
+        // Gọi API Flask khi submit form
+        document.getElementById('attack-form').onsubmit = async function(e) {
+            e.preventDefault();
+            const target = document.getElementById('target').value;
+            const mode = document.getElementById('mode').value;
+            renderLog(['[INFO] Initializing...']);
+            renderResult(null);
+            renderStatus('Đang chạy attack...', 'running');
+            // Gửi request khởi động attack
+            await fetch('http://localhost:5005/attack', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ target, mode })
+            });
+            pollLogAndResult();
+        };
+
+        // Poll log và kết quả liên tục
+        let pollInterval = null;
+        function pollLogAndResult() {
+            if (pollInterval) clearInterval(pollInterval);
+            pollInterval = setInterval(async () => {
+                const logRes = await fetch('http://localhost:5005/attack_log');
+                const logData = await logRes.json();
+                renderLog(logData.log || []);
+                // Kết quả
+                const resultRes = await fetch('http://localhost:5005/attack_result');
+                const resultData = await resultRes.json();
+                renderResult(resultData.result);
+                if (logData.running === false) {
+                    clearInterval(pollInterval);
+                    renderStatus('Attack đã hoàn thành.', 'done');
+                }
+            }, 1000);
+        }
+
+        document.getElementById('export-report-btn').onclick = function() {
+            fetch('http://localhost:5005/export_report')
+                .then(response => {
+                    if (!response.ok) throw new Error('Không thể xuất báo cáo!');
+                    return response.blob();
+                })
+                .then(blob => {
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'bao_cao_ai_attacker.adoc';
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                    window.URL.revokeObjectURL(url);
+                })
+                .catch(() => alert('Không thể xuất báo cáo!'));
+        };
+    </script>
+</body>
+</html> 
